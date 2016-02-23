@@ -5,6 +5,7 @@ WARNS := -Wall
 
 SRCS :=
 SRCS += main.c
+SRCS += status.c
 SRCS += toy.c
 
 LIBS := -lncurses -lm

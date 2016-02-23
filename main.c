@@ -6,6 +6,7 @@
 #include <unistd.h>
 
 #include "lengthof.h"
+#include "status.h"
 #include "toy.h"
 
 void tvdiff(struct timeval *td, const struct timeval *t1, const struct timeval *t2)
@@ -45,75 +46,39 @@ int get_key(int fd, unsigned int udelay)
     return k;
 }
 
-void loop(WINDOW *win, struct toy *toy)
+void loop(WINDOW *win, struct status *status, struct toy *toy)
 {
+    int key;
     unsigned int udelay;
     unsigned int frames;
     struct timeval now, then, to;
-    struct status status;
     int quit;
 
-    status.d_fps = MAX_FPS;
-    status.m_fps = 0.0;
-    getmaxyx(win, status.max_y, status.max_x);
+    getmaxyx(win, status->max_y, status->max_x);
     quit = 0;
     frames = 0;
     gettimeofday(&then, 0);
     while(!quit) {
-        toy_display(win, toy, &status);
-        toy_update(toy, &status);
+        toy->display(toy, status, win);
+        toy->update(toy, status);
 
         gettimeofday(&now, 0);
         frames++;
         tvdiff(&to, &now, &then);
         if (to.tv_sec >= 1) { /* at least 1 second has passed */
-            status.m_fps = frames / ((double)to.tv_sec + (double)to.tv_usec / 1000000.0);
+            status->m_fps = frames / ((double)to.tv_sec + (double)to.tv_usec / 1000000.0);
         }
 
-        udelay = 1000000 / (unsigned int)floor(status.d_fps+0.5);
-        switch (get_key(STDIN_FILENO, udelay)) {
+        udelay = 1000000 / (unsigned int)floor(status->d_fps+0.5);
+        key = get_key(STDIN_FILENO, udelay);
+        toy->onkey(toy, key);
+        status->onkey(status, key);
+        switch (key) {
             case 'q': /* quit */
                 quit = 1;
                 break;
-            case 'h': /* left */
-                toy->x_velocity = toy->x_velocity * 0.8;
-                if (toy->x_velocity < MIN_X_VELOCITY)
-                    toy->x_velocity = MIN_X_VELOCITY;
-                break;
-            case 'j': /* down */
-                if (toy->y_velocity > 0.0)
-                    toy->y_velocity = toy->y_velocity * 1.2;
-                else
-                    toy->y_velocity = 0.2;
-                if (toy->y_velocity > MAX_Y_VELOCITY)
-                    toy->y_velocity = MAX_Y_VELOCITY;
-                break;
-            case 'k': /* up */
-                toy->y_velocity = toy->y_velocity * 0.8;
-                if (toy->y_velocity < MIN_Y_VELOCITY)
-                    toy->y_velocity = 0.0;
-                break;
-            case 'l': /* right */
-                toy->x_velocity = toy->x_velocity * 1.2;
-                if (toy->x_velocity > MAX_X_VELOCITY)
-                    toy->x_velocity = MAX_X_VELOCITY;
-                break;
-            case 's': /* slower */
-                status.d_fps = status.d_fps * 0.8;
-                if (status.d_fps <  MIN_FPS)
-                    status.d_fps = MIN_FPS;
-                frames = 0;
-                /* restart frame counter */
-                status.m_fps = 0.0;
-                frames = 0;
-                memcpy(&then, &now, sizeof(then));
-                break;
-            case 'S': /* faster */
-                status.d_fps = status.d_fps * 1.2;
-                if (status.d_fps >  MAX_FPS)
-                    status.d_fps = MAX_FPS;
-                /* restart frame counter */
-                status.m_fps = 0.0;
+            case '-': /* slower */
+            case '+': /* faster */
                 frames = 0;
                 memcpy(&then, &now, sizeof(then));
                 break;
@@ -126,6 +91,7 @@ void loop(WINDOW *win, struct toy *toy)
 int main(int argc, char *argv[])
 {
     struct toy toy;
+    struct status status;
 
     initscr();
     cbreak();
@@ -135,9 +101,12 @@ int main(int argc, char *argv[])
     keypad(stdscr, TRUE);
     curs_set(FALSE);
     toy_init(&toy);
+    status_init(&status);
 
-    loop(stdscr, &toy);
 
+    loop(stdscr, &status, &toy);
+
+    status_deinit(&status);
     toy_deinit(&toy);
 
     endwin(); // Restore normal terminal behavior
