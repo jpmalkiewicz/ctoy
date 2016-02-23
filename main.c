@@ -6,6 +6,7 @@
 #include <unistd.h>
 
 #include "lengthof.h"
+#include "entity.h"
 #include "display.h"
 #include "status.h"
 #include "toy.h"
@@ -37,22 +38,22 @@ int get_key(int fd, unsigned int udelay)
     return k;
 }
 
-void loop(struct display *display, struct status *status, struct toy *toy)
+void loop(struct display *display, struct status *status, struct entity *toy)
 {
     int key;
     unsigned int udelay;
 
-    toy->display(toy, display);
+    toy->m->display(toy, display);
     status->display(status, display);
     display->display(display);
 
-    toy->update(toy, display);
+    toy->m->update(toy, display);
     status->update(status);
 
     udelay = 1000000 / (unsigned int)floor(status->d_fps+0.5);
     key = get_key(STDIN_FILENO, udelay);
 
-    toy->onkey(toy, key);
+    toy->m->onkey(toy, key);
     status->onkey(status, key);
 }
 
@@ -60,18 +61,18 @@ int main(int argc, char *argv[])
 {
     struct display display;
     struct status status;
-    struct toy toy;
+    struct entity *toy;
 
     display_init(&display);
-    toy_init(&toy);
+    toy = toy_init();
     status_init(&status);
 
     while (!status.quit) {
-        loop(&display, &status, &toy);
+        loop(&display, &status, toy);
     }
 
     status_deinit(&status);
-    toy_deinit(&toy);
+    toy = toy->m->deinit(toy);
     display_deinit(&display);
     return 0;
 }

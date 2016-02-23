@@ -1,18 +1,25 @@
 #include <sys/time.h>
 #include <math.h>
 #include <ncurses.h>
+#include <stddef.h>
+#include <stdlib.h>
 
 #include "lengthof.h"
+#include "containerof.h"
 
+#include "entity.h"
 #include "display.h"
-#include "status.h"
+
+#include "toy_priv.h"
 #include "toy.h"
 
-static void toy_display(const struct toy *toy, struct display *display)
+static void toy_display(const struct entity *entity, struct display *display)
 {
     int i;
+    const struct toy *toy;
 
-    //wclear(win); /* this is expensive! */
+    toy = containerof(entity, struct toy, entity);
+
     for (i=1; i<lengthof(toy->obj); i++) {
         if ((toy->obj[i].pos.y != toy->obj[i-1].pos.y) || (toy->obj[i].pos.x != toy->obj[i-1].pos.x)) {
             mvwaddch(display->win, toy->obj[i].pos.y, toy->obj[i].pos.x, toy->obj[i].tile);
@@ -24,9 +31,12 @@ static void toy_display(const struct toy *toy, struct display *display)
     mvwprintw(display->win,display->max_y-2, display->max_x/2, "py:%6.3f vy:%6.3f",toy->y_pos,toy->y_velocity);
 }
 
-static void toy_update(struct toy *toy, const struct display *display)
+static void toy_update(struct entity *entity, const struct display *display)
 {
     int i;
+    struct toy *toy;
+
+    toy = containerof(entity, struct toy, entity);
 
     /* shuffle */
     for (i=1; i<lengthof(toy->obj); i++) {
@@ -57,8 +67,12 @@ static void toy_update(struct toy *toy, const struct display *display)
     toy->obj[0].pos.y = (int)floor(toy->y_pos+0.5);
 }
 
-static void toy_onkey(struct toy *toy, int key)
+static void toy_onkey(struct entity *entity, int key)
 {
+    struct toy *toy;
+
+    toy = containerof(entity, struct toy, entity);
+
     switch (key) {
         case 'h': /* left */
             toy->x_velocity = toy->x_velocity * 0.8;
@@ -92,12 +106,34 @@ static void toy_onkey(struct toy *toy, int key)
     }
 }
 
-void
-toy_init(struct toy *toy)
+static struct entity*
+toy_deinit(struct entity *entity)
+{
+    struct toy *toy;
+
+    toy = containerof(entity, struct toy, entity);
+    free(toy);
+
+    return NULL;
+}
+
+static const struct entity_methods toy_methods = {
+    .onkey = toy_onkey,
+    .update = toy_update,
+    .display = toy_display,
+    .deinit = toy_deinit,
+};
+
+struct entity*
+toy_init(void)
 {
     int i;
+    struct toy *toy;
     const char tiles[] = "0--. ";
 
+    if ((toy=malloc(sizeof(*toy))) == NULL) {
+        return NULL;
+    }
     toy->x_velocity = 1.0;
     toy->y_velocity = 0;
     toy->x_dir = 1;
@@ -109,13 +145,6 @@ toy_init(struct toy *toy)
         toy->obj[i].pos.x = i;
         toy->obj[i].pos.y = 0;
     }
-    toy->onkey = toy_onkey;
-    toy->update = toy_update;
-    toy->display = toy_display;
-}
-
-void
-toy_deinit(struct toy *toy)
-{
-    return; /* nothing */
+    toy->entity.m = &toy_methods;
+    return &toy->entity;
 }
