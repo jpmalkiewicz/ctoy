@@ -1,10 +1,11 @@
 #
 
-DEFS := 
+DEFS :=
 WARNS := -Wall
 
 SRCS :=
-SRCS += ctoy.c
+SRCS += main.c
+SRCS += toy.c
 
 LIBS := -lncurses -lm
 
