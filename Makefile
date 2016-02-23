@@ -41,6 +41,6 @@ clean:
 
 
 nuke: clean
-	$(RM) calm
+	$(RM) ctoy
 
 -include $(DEPS)
