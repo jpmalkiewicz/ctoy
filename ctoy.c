@@ -53,140 +53,187 @@ int get_key(int fd, unsigned int udelay)
     return k;
 }
 
-void loop(WINDOW *win)
-{
-    int i;
-    int x[5], y[5];
-    int ch[5];
+struct obj {
+    int tile;
+    struct {
+        int x;
+        int y;
+    } pos;
+};
+
+struct toy {
+    struct obj obj[5];
     double x_pos, y_pos;
     double x_velocity, y_velocity;
     double x_dir, y_dir;
-    int max_x, max_y;
+};
+
+struct status {
+    double d_fps;
+    double m_fps;
+    int max_x;
+    int max_y;
+};
+
+void
+toy_init(struct toy *toy)
+{
+    int i;
+    const char tiles[] = "0--. ";
+
+    toy->x_velocity = 1.0;
+    toy->y_velocity = 0;
+    toy->x_dir = 1;
+    toy->y_dir = 1;
+
+    toy->x_pos = toy->y_pos = 0.0;
+    for (i=0; i<lengthof(toy->obj); i++) {
+        toy->obj[i].tile = tiles[i%lengthof(tiles)];
+        toy->obj[i].pos.x = i;
+        toy->obj[i].pos.y = 0;
+    }
+}
+
+void
+toy_deinit(struct toy *toy)
+{
+    return; /* nothing */
+}
+
+void toy_display(WINDOW *win, const struct toy *toy, const struct status *status)
+{
+    int i;
+
+    //wclear(win); /* this is expensive! */
+    for (i=1; i<lengthof(toy->obj); i++) {
+        if ((toy->obj[i].pos.y != toy->obj[i-1].pos.y) || (toy->obj[i].pos.x != toy->obj[i-1].pos.x)) {
+            mvwaddch(win, toy->obj[i].pos.y, toy->obj[i].pos.x, toy->obj[i].tile);
+        }
+    }
+    mvwaddch(win, toy->obj[0].pos.y, toy->obj[0].pos.x, toy->obj[0].tile);
+
+    mvwprintw(win,status->max_y-2,  0, "px:%6.3f vx:%6.3f",toy->x_pos,toy->x_velocity);
+    mvwprintw(win,status->max_y-2, status->max_x/2, "py:%6.3f vy:%6.3f",toy->y_pos,toy->y_velocity);
+    mvwprintw(win,status->max_y-1, 0, "fps:%6.3f/%6.3f",status->m_fps,status->d_fps);
+    wrefresh(win);
+}
+
+void toy_update(struct toy *toy, const struct status *status)
+{
+    int i;
+
+    /* shuffle */
+    for (i=1; i<lengthof(toy->obj); i++) {
+        toy->obj[lengthof(toy->obj)-i].pos.x = toy->obj[lengthof(toy->obj)-i-1].pos.x;
+        toy->obj[lengthof(toy->obj)-i].pos.y = toy->obj[lengthof(toy->obj)-i-1].pos.y;
+    }
+
+    toy->x_pos += (toy->x_dir * toy->x_velocity);
+    if ((toy->x_pos < 0.0) || ((toy->x_pos+0.5) >= (double)status->max_x)) {
+        toy->x_dir = -toy->x_dir; /* reverse direction */
+        if (toy->x_pos < 0.0) {
+            toy->x_pos = -toy->x_pos;
+        } else {
+            toy->x_pos = status->max_x - (toy->x_pos - status->max_x);
+        }
+    }
+    toy->obj[0].pos.x = (int)floor(toy->x_pos+0.5);
+
+    toy->y_pos += (toy->y_dir * toy->y_velocity);
+    if ((toy->y_pos < 0.0) || ((toy->y_pos+0.5) >= (double)status->max_y)) {
+        toy->y_dir = -toy->y_dir; /* reverse direction */
+        if (toy->y_pos > 0.0) {
+            toy->y_pos = status->max_y - (toy->y_pos - status->max_y);
+        } else {
+            toy->y_pos = -toy->y_pos;
+        }
+    }
+    toy->obj[0].pos.y = (int)floor(toy->y_pos+0.5);
+}
+
+
+void loop(WINDOW *win, struct toy *toy)
+{
     unsigned int udelay;
     unsigned int frames;
     struct timeval now, then, to;
-    double d_fps, m_fps;
+    struct status status;
     int quit;
 
-    x_velocity = 1;
-    y_velocity = 0;
-    x_dir = 1;
-    y_dir = 1;
-    x_pos = y_pos = 0.0;
-    memset(x, 0, sizeof(x));
-    memset(y, 0, sizeof(y));
-    ch[0] = 'O';
-    ch[1] = 'o';
-    ch[2] = '_';
-    ch[3] = '.';
-    ch[4] = ' ';
-    d_fps = MAX_FPS;
-    m_fps = 0.0;
-    getmaxyx(win, max_y, max_x);
+    status.d_fps = MAX_FPS;
+    status.m_fps = 0.0;
+    getmaxyx(win, status.max_y, status.max_x);
     quit = 0;
     frames = 0;
     gettimeofday(&then, 0);
     while(!quit) {
-        //wclear(win); /* this is expensive! */
-        for (i=1; i<lengthof(x); i++) {
-            if ((y[i] != y[i-1]) || (x[i] != x[i-1])) {
-                mvwaddch(win, y[i], x[i], ch[i]);
-            }
-        }
-        mvwaddch(win, y[0], x[0], ch[0]);
-        /* shuffle */
-        for (i=1; i<lengthof(x); i++) {
-            x[lengthof(x)-i] = x[lengthof(x)-i-1];
-            y[lengthof(x)-i] = y[lengthof(x)-i-1];
-        }
+        toy_display(win, toy, &status);
+        toy_update(toy, &status);
 
-        mvwprintw(win,max_y-2,  0, "px:%6.3f vx:%6.3f",x_pos,x_velocity);
-        mvwprintw(win,max_y-2, max_x/2, "py:%6.3f vy:%6.3f",y_pos,y_velocity);
-        mvwprintw(win,max_y-1, 0, "fps:%6.3f/%6.3f",m_fps,d_fps);
-        wrefresh(win);
         gettimeofday(&now, 0);
         frames++;
         tvdiff(&to, &now, &then);
         if (to.tv_sec >= 1) { /* at least 1 second has passed */
-            m_fps = frames / ((double)to.tv_sec + (double)to.tv_usec / 1000000.0);
+            status.m_fps = frames / ((double)to.tv_sec + (double)to.tv_usec / 1000000.0);
         }
 
-        udelay = 1000000 / (unsigned int)floor(d_fps+0.5);
+        udelay = 1000000 / (unsigned int)floor(status.d_fps+0.5);
         switch (get_key(STDIN_FILENO, udelay)) {
             case 'q': /* quit */
                 quit = 1;
                 break;
             case 'h': /* left */
-                x_velocity = x_velocity * 0.8;
-                if (x_velocity < MIN_X_VELOCITY)
-                    x_velocity = MIN_X_VELOCITY;
+                toy->x_velocity = toy->x_velocity * 0.8;
+                if (toy->x_velocity < MIN_X_VELOCITY)
+                    toy->x_velocity = MIN_X_VELOCITY;
                 break;
             case 'j': /* down */
-                if (y_velocity > 0.0)
-                    y_velocity = y_velocity * 1.2;
+                if (toy->y_velocity > 0.0)
+                    toy->y_velocity = toy->y_velocity * 1.2;
                 else
-                    y_velocity = 0.2;
-                if (y_velocity > MAX_Y_VELOCITY)
-                    y_velocity = MAX_Y_VELOCITY;
+                    toy->y_velocity = 0.2;
+                if (toy->y_velocity > MAX_Y_VELOCITY)
+                    toy->y_velocity = MAX_Y_VELOCITY;
                 break;
             case 'k': /* up */
-                y_velocity = y_velocity * 0.8;
-                if (y_velocity < MIN_Y_VELOCITY)
-                    y_velocity = 0.0;
+                toy->y_velocity = toy->y_velocity * 0.8;
+                if (toy->y_velocity < MIN_Y_VELOCITY)
+                    toy->y_velocity = 0.0;
                 break;
             case 'l': /* right */
-                x_velocity = x_velocity * 1.2;
-                if (x_velocity > MAX_X_VELOCITY)
-                    x_velocity = MAX_X_VELOCITY;
+                toy->x_velocity = toy->x_velocity * 1.2;
+                if (toy->x_velocity > MAX_X_VELOCITY)
+                    toy->x_velocity = MAX_X_VELOCITY;
                 break;
             case 's': /* slower */
-                d_fps = d_fps * 0.8;
-                if (d_fps <  MIN_FPS)
-                    d_fps = MIN_FPS;
+                status.d_fps = status.d_fps * 0.8;
+                if (status.d_fps <  MIN_FPS)
+                    status.d_fps = MIN_FPS;
                 frames = 0;
                 /* restart frame counter */
-                m_fps = 0.0;
+                status.m_fps = 0.0;
                 frames = 0;
                 memcpy(&then, &now, sizeof(then));
                 break;
             case 'S': /* faster */
-                d_fps = d_fps * 1.2;
-                if (d_fps >  MAX_FPS)
-                    d_fps = MAX_FPS;
+                status.d_fps = status.d_fps * 1.2;
+                if (status.d_fps >  MAX_FPS)
+                    status.d_fps = MAX_FPS;
                 /* restart frame counter */
-                m_fps = 0.0;
+                status.m_fps = 0.0;
                 frames = 0;
                 memcpy(&then, &now, sizeof(then));
                 break;
             default:
                 break;
         }
-        x_pos += (x_dir * x_velocity);
-        if ((x_pos < 0.0) || ((x_pos+0.5) >= (double)max_x)) {
-            x_dir = -x_dir; /* reverse direction */
-            if (x_pos < 0.0) {
-                x_pos = -x_pos;
-            } else {
-                x_pos = max_x - (x_pos - max_x);
-            }
-        }
-        x[0] = (int)floor(x_pos+0.5);
-
-        y_pos += (y_dir * y_velocity);
-        if ((y_pos < 0.0) || ((y_pos+0.5) >= (double)max_y)) {
-            y_dir = -y_dir; /* reverse direction */
-            if (y_pos > 0.0) {
-                y_pos = max_y - (y_pos - max_y);
-            } else {
-                y_pos = -y_pos;
-            }
-        }
-        y[0] = (int)floor(y_pos+0.5);
     }
 }
 
 int main(int argc, char *argv[])
 {
+    struct toy toy;
+
     initscr();
     cbreak();
     noecho();
@@ -194,8 +241,11 @@ int main(int argc, char *argv[])
     intrflush(stdscr, FALSE);
     keypad(stdscr, TRUE);
     curs_set(FALSE);
+    toy_init(&toy);
 
-    loop(stdscr);
+    loop(stdscr, &toy);
+
+    toy_deinit(&toy);
 
     endwin(); // Restore normal terminal behavior
     return 0;
