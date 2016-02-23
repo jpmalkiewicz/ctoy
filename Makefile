@@ -4,9 +4,11 @@ DEFS :=
 WARNS := -Wall
 
 SRCS :=
+SRCS += display.c
 SRCS += main.c
 SRCS += status.c
 SRCS += toy.c
+SRCS += tv.c
 
 LIBS := -lncurses -lm
 

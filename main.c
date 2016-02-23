@@ -6,19 +6,10 @@
 #include <unistd.h>
 
 #include "lengthof.h"
+#include "display.h"
 #include "status.h"
 #include "toy.h"
-
-void tvdiff(struct timeval *td, const struct timeval *t1, const struct timeval *t2)
-{
-    if (t1->tv_usec > t2->tv_usec) {
-        td->tv_usec = t1->tv_usec - t2->tv_usec;
-        td->tv_sec = t1->tv_sec - t2->tv_sec;
-    } else {
-        td->tv_usec = 1000000 + t1->tv_usec - t2->tv_usec;
-        td->tv_sec = t1->tv_sec - t2->tv_sec - 1;
-    }
-}
+#include "tv.h"
 
 int get_key(int fd, unsigned int udelay)
 {
@@ -46,69 +37,41 @@ int get_key(int fd, unsigned int udelay)
     return k;
 }
 
-void loop(WINDOW *win, struct status *status, struct toy *toy)
+void loop(struct display *display, struct status *status, struct toy *toy)
 {
     int key;
     unsigned int udelay;
-    unsigned int frames;
-    struct timeval now, then, to;
-    int quit;
 
-    getmaxyx(win, status->max_y, status->max_x);
-    quit = 0;
-    frames = 0;
-    gettimeofday(&then, 0);
-    while(!quit) {
-        toy->display(toy, status, win);
-        toy->update(toy, status);
+    toy->display(toy, display);
+    status->display(status, display);
+    display->display(display);
 
-        gettimeofday(&now, 0);
-        frames++;
-        tvdiff(&to, &now, &then);
-        if (to.tv_sec >= 1) { /* at least 1 second has passed */
-            status->m_fps = frames / ((double)to.tv_sec + (double)to.tv_usec / 1000000.0);
-        }
+    toy->update(toy, display);
+    status->update(status);
 
-        udelay = 1000000 / (unsigned int)floor(status->d_fps+0.5);
-        key = get_key(STDIN_FILENO, udelay);
-        toy->onkey(toy, key);
-        status->onkey(status, key);
-        switch (key) {
-            case 'q': /* quit */
-                quit = 1;
-                break;
-            case '-': /* slower */
-            case '+': /* faster */
-                frames = 0;
-                memcpy(&then, &now, sizeof(then));
-                break;
-            default:
-                break;
-        }
-    }
+    udelay = 1000000 / (unsigned int)floor(status->d_fps+0.5);
+    key = get_key(STDIN_FILENO, udelay);
+
+    toy->onkey(toy, key);
+    status->onkey(status, key);
 }
 
 int main(int argc, char *argv[])
 {
-    struct toy toy;
+    struct display display;
     struct status status;
+    struct toy toy;
 
-    initscr();
-    cbreak();
-    noecho();
-    nonl();
-    intrflush(stdscr, FALSE);
-    keypad(stdscr, TRUE);
-    curs_set(FALSE);
+    display_init(&display);
     toy_init(&toy);
     status_init(&status);
 
-
-    loop(stdscr, &status, &toy);
+    while (!status.quit) {
+        loop(&display, &status, &toy);
+    }
 
     status_deinit(&status);
     toy_deinit(&toy);
-
-    endwin(); // Restore normal terminal behavior
+    display_deinit(&display);
     return 0;
 }

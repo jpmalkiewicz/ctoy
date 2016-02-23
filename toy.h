@@ -7,6 +7,7 @@
 #define MAX_Y_VELOCITY (10.0)
 
 struct status;
+struct display;
 
 struct obj {
     int tile;
@@ -22,8 +23,8 @@ struct toy {
     double x_velocity, y_velocity;
     double x_dir, y_dir;
     void (*onkey)(struct toy*, int key);
-    void (*update)(struct toy*, const struct status *status);
-    void (*display)(const struct toy*, const struct status *status, WINDOW *win);
+    void (*update)(struct toy*, const struct display *display);
+    void (*display)(const struct toy*, struct display *display);
 };
 
 
